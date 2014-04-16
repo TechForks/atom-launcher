@@ -1,5 +1,12 @@
 const Me = imports.misc.extensionUtils.getCurrentExtension();
-const FreqView = Me.imports.freqView;
+const ShellVersion = imports.misc.config.PACKAGE_VERSION.split(".").map(function (x) { return +x; })
+let fv;
+if (ShellVersion[1] === 12) {
+    fv = Me.imports.freqView;
+} else {
+    fv = Me.imports.freqView10;
+}
+const FreqView = fv;
 const St = imports.gi.St;
 const Main = imports.ui.main;
 const Tweener = imports.ui.tweener;
@@ -17,7 +24,7 @@ function enable() {
     Main.overview.viewSelector.appDisplay._views[0].view.actor.hide();
     Main.overview.viewSelector.appDisplay._viewStack.remove_actor(prevAllView.actor);
     Main.overview.viewSelector.appDisplay._viewStack.add_actor(freqAllView.actor);
-    Main.overview.viewSelector.appDisplay._redisplay();
+    FreqView.enable();
     Main.overview.viewSelector.appDisplay._controls.hide();
 }
 
@@ -26,6 +33,6 @@ function disable() {
     Main.overview.viewSelector.appDisplay._views[1].view = prevAllView;
     Main.overview.viewSelector.appDisplay._viewStack.add_actor(prevAllView.actor);
     freqAllView = null;
-    Main.overview.viewSelector.appDisplay._redisplay();
+    FreqView.disable();
     Main.overview.viewSelector.appDisplay._controls.show();
 }

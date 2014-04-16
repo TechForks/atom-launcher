@@ -2,7 +2,7 @@
 
 UUID = atom-dash@ozonos.org
 BASE_MODULES = extension.js stylesheet.css metadata.json LICENSE.md README.md
-EXTRA_MODULES = freqView.js
+EXTRA_MODULES = freqView10.js freqView.js
 TOLOCALIZE =  
 INSTALLBASE = ~/.local/share/gnome-shell/extensions
 INSTALLNAME = atom-dash@ozonos.org

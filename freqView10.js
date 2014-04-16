@@ -5,6 +5,7 @@ const Gio = imports.gi.Gio;
 const GLib = imports.gi.GLib;
 const GObject = imports.gi.GObject;
 const Gtk = imports.gi.Gtk;
+const GMenu = imports.gi.GMenu;
 const Shell = imports.gi.Shell;
 const Lang = imports.lang;
 const Signals = imports.signals;
@@ -28,14 +29,13 @@ const Util = imports.misc.util;
 const AppDisplay = imports.ui.appDisplay;
 
 function enable(){
-    Main.overview.viewSelector.appDisplay._views[0].view._redisplay();
-    Main.overview.viewSelector.appDisplay._views[1].view._redisplay();
+   Main.overview.viewSelector.appDisplay._redisplay(); 
 }
 
 let disable = enable;
 
 const FreqAllView = new Lang.Class({
-    Name: 'FreqAllView',
+    Name: 'AllView',
     Extends: AppDisplay.BaseAppView,
 
     _init: function() {
@@ -53,6 +53,8 @@ const FreqAllView = new Lang.Class({
 
         this._scrollView.set_policy(Gtk.PolicyType.NEVER,
                                     Gtk.PolicyType.AUTOMATIC);
+
+        this._usage = Shell.AppUsage.get_default();
         // we are only using ScrollView for the fade effect, hide scrollbars
         this._scrollView.vscroll.hide();
         this._adjustment = this._scrollView.vscroll.adjustment;
@@ -65,7 +67,7 @@ const FreqAllView = new Lang.Class({
         this._pageIndicators.actor.connect('scroll-event', Lang.bind(this, this._onScroll));
         this.actor.add_actor(this._pageIndicators.actor);
 
-        this.folderIcons = [];
+        this._folderIcons = [];
 
         this._stack = new St.Widget({ layout_manager: new Clutter.BinLayout() });
         let box = new St.BoxLayout({ vertical: true });
@@ -130,76 +132,6 @@ const FreqAllView = new Lang.Class({
                     this._keyPressEventId = 0;
                 }
             }));
-
-        this._redisplayWorkId = Main.initializeDeferredWork(this.actor, Lang.bind(this, this._redisplay));
-
-        Shell.AppSystem.get_default().connect('installed-changed', Lang.bind(this, function() {
-            Main.queueDeferredWork(this._redisplayWorkId);
-        }));
-        this._folderSettings = new Gio.Settings({ schema: 'org.gnome.desktop.app-folders' });
-        this._folderSettings.connect('changed::folder-children', Lang.bind(this, function() {
-            Main.queueDeferredWork(this._redisplayWorkId);
-        }));
-    },
-
-    removeAll: function() {
-        this.folderIcons = [];
-        this.parent();
-    },
-
-    _itemNameChanged: function(item) {
-        // If an item's name changed, we can pluck it out of where it's
-        // supposed to be and reinsert it where it's sorted.
-        let oldIdx = this._allItems.indexOf(item);
-        this._allItems.splice(oldIdx, 1);
-        let newIdx = Util.insertSorted(this._allItems, item, this._compareItems);
-
-        this._grid.removeItem(item);
-        this._grid.addItem(item, newIdx);
-    },
-
-    _refilterApps: function() {
-        this._allItems.forEach(function(icon) {
-            if (icon instanceof AppDisplay.AppIcon)
-                icon.actor.visible = true;
-        });
-
-        this.folderIcons.forEach(Lang.bind(this, function(folder) {
-            let folderApps = folder.getAppIds();
-            folderApps.forEach(Lang.bind(this, function(appId) {
-                let appIcon = this._items[appId];
-                appIcon.actor.visible = false;
-            }));
-        }));
-    },
-
-    _loadApps: function() {
-        let apps = Gio.AppInfo.get_all().filter(function(appInfo) {
-            return appInfo.should_show();
-        }).map(function(app) {
-            return app.get_id();
-        });
-
-        let appSys = Shell.AppSystem.get_default();
-
-        let folders = this._folderSettings.get_strv('folder-children');
-        folders.forEach(Lang.bind(this, function(id) {
-            let path = this._folderSettings.path + 'folders/' + id + '/';
-            let icon = new AppDisplay.FolderIcon(id, path, this);
-            icon.connect('name-changed', Lang.bind(this, this._itemNameChanged));
-            icon.connect('apps-changed', Lang.bind(this, this._refilterApps));
-            this.addItem(icon);
-            this.folderIcons.push(icon);
-        }));
-
-        apps.forEach(Lang.bind(this, function(appId) {
-            let app = appSys.lookup_app(appId);
-            let icon = new AppDisplay.AppIcon(app);
-            this.addItem(icon);
-        }));
-
-        this.loadGrid();
-        this._refilterApps();
     },
 
     getCurrentPageY: function() {
@@ -269,7 +201,7 @@ const FreqAllView = new Lang.Class({
 
     _onScroll: function(actor, event) {
         if (this._displayingPopup)
-            return Clutter.EVENT_STOP;
+            return true;
 
         let direction = event.get_scroll_direction();
         if (direction == Clutter.ScrollDirection.UP)
@@ -277,7 +209,7 @@ const FreqAllView = new Lang.Class({
         else if (direction == Clutter.ScrollDirection.DOWN)
             this.goToPage(this._currentPage + 1);
 
-        return Clutter.EVENT_STOP;
+        return true;
     },
 
     _onPan: function(action) {
@@ -308,17 +240,97 @@ const FreqAllView = new Lang.Class({
 
     _onKeyPressEvent: function(actor, event) {
         if (this._displayingPopup)
-            return Clutter.EVENT_STOP;
+            return true;
 
         if (event.get_key_symbol() == Clutter.Page_Up) {
             this.goToPage(this._currentPage - 1);
-            return Clutter.EVENT_STOP;
+            return true;
         } else if (event.get_key_symbol() == Clutter.Page_Down) {
             this.goToPage(this._currentPage + 1);
-            return Clutter.EVENT_STOP;
+            return true;
         }
 
-        return Clutter.EVENT_PROPAGATE;
+        return false;
+    },
+
+    _getItemId: function(item) {
+        if (item instanceof Shell.App)
+            return item.get_id();
+        else if (item instanceof GMenu.TreeDirectory)
+            return item.get_menu_id();
+        else
+            return null;
+    },
+
+    _createItemIcon: function(item) {
+        if (item instanceof Shell.App)
+            return new AppDisplay.AppIcon(item);
+        else if (item instanceof GMenu.TreeDirectory)
+            return new AppDisplay.FolderIcon(item, this);
+        else
+            return null;
+    },
+
+    _isFreq: function(item, mostUsed){
+        for (var app in mostUsed) {
+            if (mostUsed[app].get_name() == item.get_name()){
+                return app;
+            }
+        }
+        return false;
+    },
+
+    _compareItems: function(itemA, itemB) {
+        // bit of a hack: rely on both ShellApp and GMenuTreeDirectory
+        // having a get_name() method
+
+        let nameA = GLib.utf8_collate_key(itemA.get_name(), -1);
+        let nameB = GLib.utf8_collate_key(itemB.get_name(), -1);
+        return (nameA > nameB) ? 1 : (nameA < nameB ? -1 : 0);
+    },
+
+    loadGrid: function() {
+        this._allItems.sort(Lang.bind(this, this._compareItems));
+        let mostUsed = this._usage.get_most_used("");
+
+        for (let j = 0; j < mostUsed.length; j++) {
+            if (!mostUsed[j].get_app_info().should_show()){
+                continue;
+            }
+            let appIcon = new AppDisplay.AppIcon(mostUsed[j]);
+            this._grid.addItem(appIcon, -1);
+        }
+
+
+        for (let i = 0; i < this._allItems.length; i++) {
+            let id = this._getItemId(this._allItems[i]);
+            if (!id || this._isFreq(this._allItems[i], mostUsed) !== false){
+                continue;
+            }
+            this._grid.addItem(this._items[id]);
+        }
+                                    
+        this.emit('view-loaded');        
+    },
+
+    removeAll: function() {
+        this._folderIcons = [];
+        this.parent();
+    },
+
+    addApp: function(app) {
+        let appIcon = this._addItem(app);
+        if (appIcon)
+            appIcon.actor.connect('key-focus-in',
+                                  Lang.bind(this, this._ensureIconVisible));
+    },
+
+    addFolder: function(dir) {
+        let folderIcon = this._addItem(dir);
+        this._folderIcons.push(folderIcon);
+        if (folderIcon)
+            folderIcon.actor.connect('key-focus-in',
+                                     Lang.bind(this, this._ensureIconVisible));
     },
 
     addFolderPopup: function(popup) {
@@ -333,7 +345,7 @@ const FreqAllView = new Lang.Class({
             }));
     },
 
-    _keyFocusIn: function(icon) {
+    _ensureIconVisible: function(icon) {
         let itemPage = this._grid.getItemPage(icon);
         this.goToPage(itemPage);
     },
@@ -385,9 +397,8 @@ const FreqAllView = new Lang.Class({
         this._availWidth = availWidth;
         this._availHeight = availHeight;
         // Update folder views
-        for (let i = 0; i < this.folderIcons.length; i++)
-            this.folderIcons[i].adaptToSize(availWidth, availHeight);
+        for (let i = 0; i < this._folderIcons.length; i++)
+            this._folderIcons[i].adaptToSize(availWidth, availHeight);
     }
 });
 Signals.addSignalMethods(FreqAllView.prototype);
-
