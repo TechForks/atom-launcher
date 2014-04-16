@@ -89,13 +89,15 @@ const FreqAllView = new Lang.Class({
         this._panning = false;
         this._clickAction = new Clutter.ClickAction();
         this._clickAction.connect('clicked', Lang.bind(this, function() {
-            if (!this._currentPopup)
+            if (!this._currentPopup){
                 return;
+            }
 
             let [x, y] = this._clickAction.get_coords();
             let actor = global.stage.get_actor_at_pos(Clutter.PickMode.ALL, x, y);
-            if (!this._currentPopup.actor.contains(actor))
+            if (!this._currentPopup.actor.contains(actor)){
                 this._currentPopup.popdown();
+            }
         }));
         this._eventBlocker.add_action(this._clickAction);
 
@@ -125,8 +127,9 @@ const FreqAllView = new Lang.Class({
                         global.stage.connect('key-press-event',
                                              Lang.bind(this, this._onKeyPressEvent));
                 } else {
-                    if (this._keyPressEventId)
+                    if (this._keyPressEventId){
                         global.stage.disconnect(this._keyPressEventId);
+                    }
                     this._keyPressEventId = 0;
                 }
             }));
@@ -160,8 +163,9 @@ const FreqAllView = new Lang.Class({
 
     _refilterApps: function() {
         this._allItems.forEach(function(icon) {
-            if (icon instanceof AppDisplay.AppIcon)
+            if (icon instanceof AppDisplay.AppIcon){
                 icon.actor.visible = true;
+            }
         });
 
         this.folderIcons.forEach(Lang.bind(this, function(folder) {
@@ -207,18 +211,22 @@ const FreqAllView = new Lang.Class({
     },
 
     goToPage: function(pageNumber) {
-        if(pageNumber < 0 || pageNumber > this._grid.nPages() - 1)
+        if(pageNumber < 0 || pageNumber > this._grid.nPages() - 1){
             return;
-        if (this._currentPage == pageNumber && this._displayingPopup && this._currentPopup)
+        }
+        if (this._currentPage == pageNumber && this._displayingPopup && this._currentPopup){
             return;
-        if (this._displayingPopup && this._currentPopup)
+        }
+        if (this._displayingPopup && this._currentPopup){
             this._currentPopup.popdown();
+        }
 
         let velocity;
-        if (!this._panning)
+        if (!this._panning){
             velocity = 0;
-        else
+        } else {
             velocity = Math.abs(this._panAction.get_velocity(0)[2]);
+        }
         // Tween the change between pages.
         // If velocity is not specified (i.e. scrolling with mouse wheel),
         // use the same speed regardless of original position
@@ -268,21 +276,24 @@ const FreqAllView = new Lang.Class({
     },
 
     _onScroll: function(actor, event) {
-        if (this._displayingPopup)
+        if (this._displayingPopup){
             return Clutter.EVENT_STOP;
+        }
 
         let direction = event.get_scroll_direction();
-        if (direction == Clutter.ScrollDirection.UP)
+        if (direction == Clutter.ScrollDirection.UP){
             this.goToPage(this._currentPage - 1);
-        else if (direction == Clutter.ScrollDirection.DOWN)
+        }else if (direction == Clutter.ScrollDirection.DOWN){
             this.goToPage(this._currentPage + 1);
+        }
 
         return Clutter.EVENT_STOP;
     },
 
     _onPan: function(action) {
-        if (this._displayingPopup)
+        if (this._displayingPopup){
             return false;
+        }
         this._panning = true;
         this._clickAction.release();
         let [dist, dx, dy] = action.get_motion_delta(0);
@@ -292,14 +303,16 @@ const FreqAllView = new Lang.Class({
     },
 
     _onPanEnd: function(action) {
-         if (this._displayingPopup)
+         if (this._displayingPopup){
             return;
+         }
         let diffCurrentPage = this._diffToPage(this._currentPage);
         if (diffCurrentPage > this._scrollView.height * AppDisplay.PAGE_SWITCH_TRESHOLD) {
-            if (action.get_velocity(0)[2] > 0)
+            if (action.get_velocity(0)[2] > 0){
                 this.goToPage(this._currentPage - 1);
-            else
+            } else {
                 this.goToPage(this._currentPage + 1);
+            }
         } else {
             this.goToPage(this._currentPage);
         }
@@ -307,9 +320,9 @@ const FreqAllView = new Lang.Class({
     },
 
     _onKeyPressEvent: function(actor, event) {
-        if (this._displayingPopup)
+        if (this._displayingPopup){
             return Clutter.EVENT_STOP;
-
+        }
         if (event.get_key_symbol() == Clutter.Page_Up) {
             this.goToPage(this._currentPage - 1);
             return Clutter.EVENT_STOP;
@@ -328,8 +341,9 @@ const FreqAllView = new Lang.Class({
                 this._eventBlocker.reactive = isOpen;
                 this._currentPopup = isOpen ? popup : null;
                 this._updateIconOpacities(isOpen);
-                if(!isOpen)
+                if(!isOpen){
                     this._closeSpaceForPopup();
+                }
             }));
     },
 
@@ -341,10 +355,11 @@ const FreqAllView = new Lang.Class({
     _updateIconOpacities: function(folderOpen) {
         for (let id in this._items) {
             let params, opacity;
-            if (folderOpen && !this._items[id].actor.checked)
+            if (folderOpen && !this._items[id].actor.checked){
                 opacity =  AppDisplay.INACTIVE_GRID_OPACITY;
-            else
+            } else {
                 opacity = 255;
+            }
             params = { opacity: opacity,
                        time: AppDisplay.INACTIVE_GRID_OPACITY_ANIMATION_TIME,
                        transition: 'easeOutQuad' };
