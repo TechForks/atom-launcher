@@ -56,7 +56,8 @@ const FreqAllView = new Lang.Class({
         // we are only using ScrollView for the fade effect, hide scrollbars
         this._scrollView.vscroll.hide();
         this._adjustment = this._scrollView.vscroll.adjustment;
-
+        this._usage = Shell.AppUsage.get_default();
+        this._usageItems = [];
         this._pageIndicators = new AppDisplay.PageIndicators();
         this._pageIndicators.connect('page-activated', Lang.bind(this,
             function(indicators, pageIndex) {
@@ -153,6 +154,9 @@ const FreqAllView = new Lang.Class({
     _itemNameChanged: function(item) {
         // If an item's name changed, we can pluck it out of where it's
         // supposed to be and reinsert it where it's sorted.
+        if (this._usageItems.indexOf(item) < 0){
+            return;
+        }
         let oldIdx = this._allItems.indexOf(item);
         this._allItems.splice(oldIdx, 1);
         let newIdx = Util.insertSorted(this._allItems, item, this._compareItems);
@@ -176,7 +180,6 @@ const FreqAllView = new Lang.Class({
             }));
         }));
     },
-
     _loadApps: function() {
         let apps = Gio.AppInfo.get_all().filter(function(appInfo) {
             return appInfo.should_show();
@@ -185,6 +188,11 @@ const FreqAllView = new Lang.Class({
         });
 
         let appSys = Shell.AppSystem.get_default();
+
+        this._usage.get_most_used("").forEach(Lang.bind(this, function(app){
+            let icon = new AppDisplay.AppIcon(appSys.lookup_app(app.get_id()));
+            this.addFreqItem(icon);
+        })); 
 
         let folders = this._folderSettings.get_strv('folder-children');
         folders.forEach(Lang.bind(this, function(id) {
@@ -199,11 +207,45 @@ const FreqAllView = new Lang.Class({
         apps.forEach(Lang.bind(this, function(appId) {
             let app = appSys.lookup_app(appId);
             let icon = new AppDisplay.AppIcon(app);
+            if (this.isFreqItem(icon)){
+                return;
+            }
             this.addItem(icon);
         }));
 
         this.loadGrid();
         this._refilterApps();
+    },
+
+    addFreqItem: function(icon) {
+        let id = icon.id;
+        if (this._items[id] !== undefined){
+            return;
+        }
+        this._usageItems.push(icon);
+        this._items[id] = icon;
+    },
+
+    isFreqItem: function(icon) {
+        for(var i=0; i<this._usageItems.length; i++){
+            if (this._usageItems[i].id == icon.id){
+                return true;
+            }
+        }
+        return false;
+    },
+
+    loadGrid: function() {
+        this._usageItems.forEach(Lang.bind(this, function(item) {
+            global.log(item.name);
+            this._grid.addItem(item);
+        }));
+
+        this._allItems.sort(this._compareItems);
+        this._allItems.forEach(Lang.bind(this, function(item) {
+            this._grid.addItem(item);
+        }));
+        this.emit('view-loaded');
     },
 
     getCurrentPageY: function() {
